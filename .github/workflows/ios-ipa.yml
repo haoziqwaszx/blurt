@@ -1,0 +1,54 @@
+name: ios-ipa
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ios-ipa"]
+    paths: [".github/workflows/ios-ipa.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+
+      - name: Generate project
+        working-directory: apps/ios
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        working-directory: apps/ios
+        run: |
+          xcodebuild \
+            -project BlurtRemote.xcodeproj \
+            -scheme BlurtRemote \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package IPA
+        working-directory: apps/ios
+        run: |
+          APP=build/Build/Products/Release-iphoneos/BlurtRemote.app
+          test -d "$APP"
+          mkdir -p out/Payload
+          cp -R "$APP" out/Payload/
+          cd out && zip -qry BlurtRemote-unsigned.ipa Payload
+          ls -la BlurtRemote-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlurtRemote-unsigned-ipa
+          path: apps/ios/out/BlurtRemote-unsigned.ipa
+          if-no-files-found: error
